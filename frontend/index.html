@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MAGIC Telescope — Particle Classifier</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:        #04050f;
+      --surface:   #0c0e1f;
+      --border:    #1c2040;
+      --gamma:     #00e5a0;
+      --hadron:    #ff4d6d;
+      --accent:    #7b61ff;
+      --text:      #e8eaf6;
+      --muted:     #5c6080;
+      --radius:    12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* starfield */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,.55) 0%, transparent 100%),
+        radial-gradient(1px 1px at 80% 10%, rgba(255,255,255,.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 55% 65%, rgba(255,255,255,.45) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 80%, rgba(255,255,255,.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 50%, rgba(255,255,255,.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 40% 40%, rgba(255,255,255,.3) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 85%, rgba(255,255,255,.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 15% 55%, rgba(255,255,255,.35) 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 30%, rgba(255,255,255,.45) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 35% 15%, rgba(255,255,255,.6) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .logo {
+      display: inline-block;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .2em;
+      color: var(--gamma);
+      background: rgba(0,229,160,.08);
+      border: 1px solid rgba(0,229,160,.2);
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-family: 'Space Mono', monospace;
+      font-size: clamp(22px, 4vw, 36px);
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -.01em;
+    }
+    h1 span { color: var(--gamma); }
+    .subtitle {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 300;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .15em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* ── Form grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-family: 'Space Mono', monospace;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .field .desc {
+      font-size: 10px;
+      color: #3a3f60;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .field input:focus { border-color: var(--accent); }
+
+    /* ── Presets ── */
+    .presets {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .preset-btn {
+      font-size: 12px;
+      font-family: 'Space Mono', monospace;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      border: 1px solid;
+      background: transparent;
+      transition: all .2s;
+    }
+    .preset-btn.gamma-preset {
+      color: var(--gamma); border-color: rgba(0,229,160,.3);
+    }
+    .preset-btn.gamma-preset:hover { background: rgba(0,229,160,.1); }
+    .preset-btn.hadron-preset {
+      color: var(--hadron); border-color: rgba(255,77,109,.3);
+    }
+    .preset-btn.hadron-preset:hover { background: rgba(255,77,109,.1); }
+
+    /* ── Submit ── */
+    .submit-btn {
+      width: 100%;
+      margin-top: 24px;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent), #5b40ff);
+      color: #fff;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      letter-spacing: .08em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    .submit-btn:hover { opacity: .88; }
+    .submit-btn:active { transform: scale(.99); }
+    .submit-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ── Result ── */
+    #result { display: none; }
+
+    .result-gamma  { border-color: rgba(0,229,160,.4); }
+    .result-hadron { border-color: rgba(255,77,109,.4); }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .result-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .icon-gamma  { background: rgba(0,229,160,.12); }
+    .icon-hadron { background: rgba(255,77,109,.12); }
+
+    .result-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .label-gamma  { color: var(--gamma); }
+    .label-hadron { color: var(--hadron); }
+
+    .result-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* confidence bar */
+    .conf-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .conf-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      width: 80px;
+      flex-shrink: 0;
+    }
+    .conf-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .conf-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .7s cubic-bezier(.4,0,.2,1);
+    }
+    .fill-gamma  { background: var(--gamma); }
+    .fill-hadron { background: var(--hadron); }
+    .conf-value {
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      width: 44px;
+      text-align: right;
+    }
+
+    /* ── Error ── */
+    .error-box {
+      display: none;
+      background: rgba(255,77,109,.08);
+      border: 1px solid rgba(255,77,109,.3);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: var(--hadron);
+      margin-top: 16px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      margin-top: 60px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">MAGIC TELESCOPE</div>
+    <h1>Particle <span>Classifier</span></h1>
+    <p class="subtitle">Enter Hillas parameters to classify an atmospheric shower event</p>
+  </header>
+
+  <div class="card">
+    <div class="card-title">// Input — Hillas Parameters</div>
+
+    <div class="presets">
+      <button class="preset-btn gamma-preset" onclick="fillPreset('gamma')">⚡ Gamma example</button>
+      <button class="preset-btn hadron-preset" onclick="fillPreset('hadron')">🌌 Hadron example</button>
+    </div>
+
+    <div class="grid" id="form-grid"></div>
+
+    <button class="submit-btn" id="submit-btn" onclick="classify()">CLASSIFY PARTICLE</button>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="error-box"></div>
+
+  <!-- Result card -->
+  <div class="card" id="result">
+    <div class="card-title">// Prediction Result</div>
+    <div class="result-header">
+      <div class="result-icon" id="result-icon"></div>
+      <div>
+        <div class="result-label" id="result-label"></div>
+        <div class="result-sub" id="result-sub"></div>
+      </div>
+    </div>
+    <div class="conf-row">
+      <div class="conf-label">GAMMA</div>
+      <div class="conf-track"><div class="conf-fill fill-gamma" id="bar-gamma" style="width:0%"></div></div>
+      <div class="conf-value" id="val-gamma">—</div>
+    </div>
+    <div class="conf-row">
+      <div class="conf-label">HADRON</div>
+      <div class="conf-track"><div class="conf-fill fill-hadron" id="bar-hadron" style="width:0%"></div></div>
+      <div class="conf-value" id="val-hadron">—</div>
+    </div>
+  </div>
+
+  <footer>MAGIC Gamma Telescope · ML Final Project</footer>
+</div>
+
+<script>
+const API_URL = "http://localhost:8000";
+
+const FIELDS = [
+  { name: "fLength",  label: "fLength",  desc: "Major axis [mm]",            step: "0.01" },
+  { name: "fWidth",   label: "fWidth",   desc: "Minor axis [mm]",            step: "0.01" },
+  { name: "fSize",    label: "fSize",    desc: "log10(photons)",              step: "0.001" },
+  { name: "fConc",    label: "fConc",    desc: "2 highest pixels / fSize",   step: "0.0001" },
+  { name: "fConc1",   label: "fConc1",   desc: "Highest pixel / fSize",      step: "0.0001" },
+  { name: "fAsym",    label: "fAsym",    desc: "Asymmetry [mm]",             step: "0.01" },
+  { name: "fM3Long",  label: "fM3Long",  desc: "3rd moment, major [mm]",     step: "0.01" },
+  { name: "fM3Trans", label: "fM3Trans", desc: "3rd moment, minor [mm]",     step: "0.01" },
+  { name: "fAlpha",   label: "fAlpha",   desc: "Angle to origin [deg]",      step: "0.01" },
+  { name: "fDist",    label: "fDist",    desc: "Distance to center [mm]",    step: "0.01" },
+];
+
+// Typical gamma event (small fAlpha → pointing toward source)
+const PRESETS = {
+  gamma:  [28.80, 16.00, 2.64, 0.39, 0.20,  27.70,  22.01, -8.20,  4.09, 81.88],
+  hadron: [76.34, 35.21, 3.12, 0.18, 0.09, -50.21, -19.44, 12.30, 68.14, 175.33],
+};
+
+// Build form
+const grid = document.getElementById("form-grid");
+FIELDS.forEach(f => {
+  grid.innerHTML += `
+    <div class="field">
+      <label>${f.label}</label>
+      <div class="desc">${f.desc}</div>
+      <input type="number" id="inp-${f.name}" step="${f.step}" placeholder="0.0"/>
+    </div>`;
+});
+
+function fillPreset(type) {
+  FIELDS.forEach((f, i) => {
+    document.getElementById(`inp-${f.name}`).value = PRESETS[type][i];
+  });
+}
+
+async function classify() {
+  const btn = document.getElementById("submit-btn");
+  const errBox = document.getElementById("error-box");
+  errBox.style.display = "none";
+
+  // Collect values
+  const body = {};
+  for (const f of FIELDS) {
+    const val = parseFloat(document.getElementById(`inp-${f.name}`).value);
+    if (isNaN(val)) {
+      errBox.textContent = `Please fill in "${f.label}".`;
+      errBox.style.display = "block";
+      return;
+    }
+    body[f.name] = val;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "CLASSIFYING...";
+
+  try {
+    const res = await fetch(`${API_URL}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "API error");
+    }
+
+    const data = await res.json();
+    showResult(data);
+
+  } catch (e) {
+    errBox.textContent = `Error: ${e.message}. Make sure the API is running on ${API_URL}`;
+    errBox.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "CLASSIFY PARTICLE";
+  }
+}
+
+function showResult(data) {
+  const isGamma = data.is_gamma;
+  const conf    = data.confidence;
+  const hadronConf = 1 - conf;
+
+  const resultCard = document.getElementById("result");
+  resultCard.style.display = "block";
+  resultCard.className = "card " + (isGamma ? "result-gamma" : "result-hadron");
+
+  document.getElementById("result-icon").className = "result-icon " + (isGamma ? "icon-gamma" : "icon-hadron");
+  document.getElementById("result-icon").textContent = isGamma ? "γ" : "H";
+  document.getElementById("result-label").className = "result-label " + (isGamma ? "label-gamma" : "label-hadron");
+  document.getElementById("result-label").textContent = isGamma ? "GAMMA RAY" : "HADRON";
+  document.getElementById("result-sub").textContent = isGamma
+    ? "Astrophysical signal — likely from a cosmic source"
+    : "Background noise — cosmic ray hadron";
+
+  // Confidence bars
+  setTimeout(() => {
+    document.getElementById("bar-gamma").style.width  = (conf * 100).toFixed(1) + "%";
+    document.getElementById("bar-hadron").style.width = (hadronConf * 100).toFixed(1) + "%";
+  }, 50);
+
+  document.getElementById("val-gamma").textContent  = (conf * 100).toFixed(1) + "%";
+  document.getElementById("val-hadron").textContent = (hadronConf * 100).toFixed(1) + "%";
+
+  resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+
+  api:
+    build: .
+    container_name: magic_api
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=models/xgboost.pkl
+      - SCALER_PATH=models/scaler.pkl
+    volumes:
+      - ./models:/app/models  
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    container_name: magic_frontend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    depends_on:
+      - api
+    restart: unless-stopped
