@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv", "notebooks", "models", "mlruns", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501", "E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

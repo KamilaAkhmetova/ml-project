@@ -1,10 +1,10 @@
 import argparse
 import os
 import sys
-import pandas as pd
-import joblib
 
-from preprocessing import FEATURES, COLUMNS
+import joblib
+import pandas as pd
+from preprocessing import COLUMNS, FEATURES
 
 CLASS_NAMES = {0: 'Hadron', 1: 'Gamma'}
 

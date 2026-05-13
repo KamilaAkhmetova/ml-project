@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   api:
@@ -8,10 +6,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MODEL_PATH=models/xgboost.pkl
+      - MODEL_PATH=models/stacking_model.pkl
       - SCALER_PATH=models/scaler.pkl
+      - SELECTED_FEATURES_PATH=models/selected_features.json
+      - BASELINE_STATS_PATH=models/baseline_stats.json
     volumes:
-      - ./models:/app/models  
+      - ./models:/app/models
+      - ./mlruns:/app/mlruns
     restart: unless-stopped
 
   frontend:

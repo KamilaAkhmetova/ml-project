@@ -1,18 +1,20 @@
-import pandas as pd
-import joblib
 import os
 
-from sklearn.linear_model import LogisticRegression
+import joblib
+import pandas as pd
+from preprocessing import run_pipeline
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
-
-from sklearn.metrics import (
-    accuracy_score, f1_score, precision_score,
-    recall_score, roc_auc_score, classification_report
-)
-
-from preprocessing import run_pipeline
 
 
 def get_models():

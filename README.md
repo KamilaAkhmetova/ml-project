@@ -1,99 +1,136 @@
-# 🔭 MAGIC Gamma Telescope — Particle Classification
+# MAGIC Gamma Telescope — Particle Classification
 
-> Automatically classify high-energy particles captured by the MAGIC telescope as **gamma rays (signal)** or **hadrons (noise)** using machine learning.
+Automatically classify high-energy particles captured by the MAGIC telescope as **gamma rays (signal)** or **hadrons (noise)** using a **stacking ensemble** built on **physics-informed engineered features**.
 
----
-
-## 📌 Problem Statement
-
-The MAGIC telescope (La Palma, Canary Islands) records tens of thousands of atmospheric shower images every night. The overwhelming majority are **hadrons** — cosmic background noise. Gamma rays, by contrast, carry information about specific astrophysical sources: supernovae, black holes, and pulsars.
-
-Without automatic classification, the telescope is essentially blind — it records everything but can identify nothing. Our ML pipeline solves this.
+Reference article: https://amrskk.github.io/mlfinal/
 
 ---
 
-## 🗂 Project Structure
+## Architecture
 
 ```
-ml-project/
-├── data/
-│   ├── magic04.data          # Raw dataset (UCI)
-│   └── processed/            # Train/test splits (generated)
-├── notebooks/
-│   ├── 01_EDA.ipynb          # Exploratory data analysis
-│   ├── 02_Preprocessing.ipynb
-│   └── 03_Modeling.ipynb     # Model training & evaluation
+                        ┌─────────────────────────┐
+  10 raw Hillas params  │  FastAPI service        │  prediction + confidence
+  (from frontend)  ───► │  (api/main.py)          │  ──────────────────────►
+                        │  1. engineer_features() │
+                        │  2. scaler.transform()  │
+                        │  3. stack.predict()     │
+                        │  4. log_prediction()    │
+                        └────────┬────────────────┘
+                                 │
+                  ┌──────────────┴──────────────┐
+                  │   StackingClassifier        │
+                  │ ┌────┐ ┌────┐ ┌──────────┐ │
+                  │ │ RF │ │XGB │ │ LightGBM │ │  → LogisticRegression (meta)
+                  │ └────┘ └────┘ └──────────┘ │
+                  └─────────────────────────────┘
+```
+
+## Project layout
+
+```
+MLFinalProject/
+├── api/
+│   ├── main.py             # FastAPI: /predict, /predict/batch, /metrics, /monitoring/psi, /model/version
+│   └── monitoring.py       # rolling prediction log + PSI computation
 ├── src/
-│   └── preprocessing.py      # Reusable preprocessing pipeline
-├── models/                   # Saved model files (.pkl)
-└── README.md
+│   ├── feature_engineering.py  # 7 physics-engineered features + constraint validation
+│   ├── preprocessing.py        # load + engineer + split + Borderline-SMOTE + scale
+│   ├── train_stacking.py       # Optuna + MLflow + SHAP + StackingClassifier
+│   ├── train_model.py          # (legacy) baseline 4-model trainer
+│   └── predict.py              # CLI batch predictor
+├── frontend/
+│   └── index.html          # static client, sends 10 raw fields to /predict
+├── tests/                  # pytest: feature engineering, monitoring, API
+├── models/                 # stacking_model.pkl, scaler.pkl, selected_features.json, baseline_stats.json
+├── mlruns/                 # MLflow file store (created on first train)
+├── data/
+│   └── magic04.data        # UCI raw dataset
+├── notebooks/              # EDA / Preprocessing / Modeling notebooks
+├── Dockerfile              # python:3.12-slim, libgomp1 for LightGBM
+├── docker-compose.yml      # api (8000) + nginx frontend (3000)
+└── requirements.txt
 ```
 
----
+## Dataset
 
-## 📊 Dataset
+**MAGIC Gamma Telescope** — UCI ([archive.ics.uci.edu](https://archive.ics.uci.edu/dataset/159/magic+gamma+telescope))
 
-**MAGIC Gamma Telescope Dataset** — [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/159/magic+gamma+telescope)
+- 19,020 events (12,332 gamma + 6,688 hadron)
+- 10 Hillas parameters (geometric descriptors of the Cherenkov ellipse)
+- Binary target: `g` → 1, `h` → 0
 
-- **19,020 samples** — 12,332 gamma (65%), 6,688 hadron (35%)
-- **10 features** — geometric descriptors of Cherenkov light ellipses (Hillas parameters)
-- **Binary target** — `g` = gamma signal, `h` = hadron background
+### Engineered features (added on top of the 10 raw ones)
 
-| Feature | Description |
-|---------|-------------|
-| fLength | Major axis of ellipse [mm] |
-| fWidth | Minor axis of ellipse [mm] |
-| fSize | log10(sum of pixel contents) |
-| fConc | Ratio: 2 highest pixels / fSize |
-| fConc1 | Ratio: highest pixel / fSize |
-| fAsym | Distance from highest pixel to center [mm] |
-| fM3Long | 3rd root of 3rd moment along major axis [mm] |
-| fM3Trans | 3rd root of 3rd moment along minor axis [mm] |
-| fAlpha | Angle of major axis with vector to origin [deg] |
-| fDist | Distance from origin to ellipse center [mm] |
+| Feature | Formula | Physics rationale |
+|---|---|---|
+| `ellipticity` | `fLength / fWidth` | Gamma showers are elongated |
+| `shower_density` | `fSize / (fLength * fWidth)` | Light concentration in ellipse |
+| `miss_parameter` | `fDist * sin(fAlpha)` | Distance from source axis |
+| `conc_ratio` | `fConc / fConc1` | Distinguishes EM vs hadronic cascade |
+| `m3_magnitude` | `√(fM3Long² + fM3Trans²)` | Total skewness |
+| `size_conc` | `fSize * fConc` | Energy-weighted concentration |
+| `long_asymmetry` | `fAsym / fLength` | Asymmetry normalized by length |
 
----
+## Model
 
-## 🤖 Models & Results
+**Stacking ensemble:**
+- Base learners: `RandomForestClassifier`, `XGBClassifier`, `LGBMClassifier`
+- Meta-learner: `LogisticRegression`
+- 5-fold internal CV, `passthrough=False`
+- Optuna TPESampler, 30 trials per base learner, objective = mean ROC-AUC over 5-fold StratifiedKFold
+- Borderline-SMOTE applied only on the training fold, synthetic rows violating physical constraints are discarded
+- Feature selection: `mutual_info_classif` (drop bottom 10 %) + correlation filter (`|r| > 0.95`)
+- SHAP summary plot logged as MLflow artifact
 
-| Model | Accuracy | F1 | Precision | Recall | ROC-AUC |
-|-------|----------|----|-----------|--------|---------|
-| **XGBoost** 🏆 | **0.8862** | **0.9151** | 0.8858 | **0.9465** | **0.9387** |
-| Random Forest | 0.8859 | 0.9148 | 0.8869 | 0.9444 | 0.9374 |
-| MLP Neural Net | 0.8801 | 0.9118 | 0.8714 | 0.9562 | 0.9328 |
-| Logistic Regression | 0.7836 | 0.8439 | 0.7929 | 0.9019 | 0.8313 |
+## Endpoints
 
-**Best model: XGBoost** with ROC-AUC = 0.9387
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/` | health check + load state |
+| POST | `/predict` | single prediction (10 raw fields) |
+| POST | `/predict/batch` | up to 10,000 events |
+| GET | `/metrics` | rolling counts + gamma ratio + avg confidence |
+| GET | `/monitoring/psi` | per-feature PSI vs training baseline (drift detection) |
+| GET | `/model/version` | model sha256 prefix + selected features |
+| GET | `/docs` | Swagger UI |
 
----
+## How to run
 
-## ⚙️ How to Run
-
-### 1. Clone the repository
-```bash
-git clone https://github.com/KamilaAkhmetova/ml-project.git
-cd ml-project
-```
-
-### 2. Install dependencies
+### Train the stacking model (≈ 30–60 min on CPU)
 ```bash
 pip install -r requirements.txt
+python src/train_stacking.py
+```
+Produces:
+- `models/stacking_model.pkl`
+- `models/scaler.pkl`
+- `models/selected_features.json`
+- `models/baseline_stats.json`
+- `mlruns/` (browse with `mlflow ui --backend-store-uri ./mlruns`)
+
+### Launch the service
+```bash
+docker compose up --build
+```
+- API → http://localhost:8000 (Swagger at `/docs`)
+- Frontend → http://localhost:3000
+
+### Run tests
+```bash
+pytest tests/ -q
+ruff check api src tests
 ```
 
-### 3. Run notebooks in order
-```
-notebooks/01_EDA.ipynb
-notebooks/02_Preprocessing.ipynb
-notebooks/03_Modeling.ipynb
-```
+## CI
 
----
+`.github/workflows/ci.yml` runs lint (ruff) + pytest + docker build on every push/PR to `main`.
 
-## 🔑 Key Findings
+## Monitoring
 
-- **fAlpha** is the most discriminative feature — gamma rays from a specific source always have small fAlpha values, while hadrons are distributed randomly across 0–90°
-- **Tree-based models** (XGBoost, Random Forest) significantly outperform linear baseline
-- All features are statistically significant (Mann-Whitney U test, p < 0.05)
-- fConc and fConc1 are highly correlated — potential for dimensionality reduction
+After ≥ 100 predictions, `GET /monitoring/psi` returns PSI per feature:
+- `< 0.1` — no drift
+- `0.1 – 0.2` — moderate drift
+- `> 0.2` — drift detected (retraining recommended)
 
-
+Baseline distribution (10-bucket quantiles per feature) is snapshotted during training into `models/baseline_stats.json`.

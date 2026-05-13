@@ -1,13 +1,19 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY api/requirements.txt .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ ./api/
-
+COPY src/ ./src/
 COPY models/ ./models/
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
 
