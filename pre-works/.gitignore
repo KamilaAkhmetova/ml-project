@@ -9,7 +9,7 @@ dist/
 *.egg-info/
 
 # Virtual envs
-.venv/
+../.venv/
 venv/
 env/
 
@@ -40,7 +40,7 @@ Thumbs.db
 .ipynb_checkpoints/
 
 # Data processed (regenerable)
-data/processed/
+pre-works/data/processed/
 
 # Large model artefacts? — keep them in repo for now since the API loads them.
 # If you switch to MLflow Model Registry or DVC, uncomment:
